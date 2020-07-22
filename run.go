@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/wcharczuk/go-chart"
@@ -18,10 +19,7 @@ const (
 var (
 	maxTossesPerDay int = 400
 	daysToPlay      int = 768
-
-	currentEarnings float64 = 0.0
-
-	earningsPerDay []float64
+	peoplePlaying   int = 1000 // must be at least 2 for bar chart
 
 	chartFile string = "/tmp/chart.png"
 )
@@ -34,16 +32,30 @@ func main() {
 	fmt.Println("Running...")
 	rand.Seed(time.Now().UnixNano())
 
-	earningsPerDay = make([]float64, 0)
+	// list of earnings for each person
+	finalEarnings := make([]float64, peoplePlaying)
 
-	// play1(1)
-	play2(maxTossesPerDay)
-	renderGraph()
+	// stop once the daily winnings are at this number
+	// play1(100)
+
+	// stop after this many tosses
+	// play2(maxTossesPerDay)
+
+	for i := 0; i < peoplePlaying; i++ {
+		finalEarning := play1(10)
+		finalEarnings[i] = finalEarning
+	}
+
+	renderAllPeopleScatterGraph(finalEarnings)
+	// renderAllPeopleBarGraph(finalEarnings)
 }
 
 // play1 plays the game with the following algorithm:
 // Keep tossing the coin until you are at +<stopat>, then stop.
-func play1(stopat int) {
+func play1(stopat int) float64 {
+
+	totalEarnings := 0.0
+	dailyRunningTotal := make([]float64, 0)
 
 	for i := 1; i < daysToPlay+1; i++ {
 		dailyTotal := 0
@@ -54,10 +66,10 @@ func play1(stopat int) {
 			switch toss {
 			case heads:
 				dailyTotal++
-				currentEarnings++
+				totalEarnings++
 			case tails:
 				dailyTotal--
-				currentEarnings--
+				totalEarnings--
 			}
 
 			if dailyTotal >= stopat {
@@ -65,13 +77,20 @@ func play1(stopat int) {
 			}
 		}
 
-		earningsPerDay = append(earningsPerDay, currentEarnings)
+		dailyRunningTotal = append(dailyRunningTotal, totalEarnings)
 	}
+
+	// total earnings after all days
+	// renderSinglePersonGraph(earningsPerDay)
+	return totalEarnings
 }
 
 // play2 plays the game with the following algorithm:
 // Make <tosses> tosses every day
-func play2(tosses int) {
+func play2(tosses int) float64 {
+
+	totalEarnings := 0.0
+	earningsPerDay := make([]float64, 0)
 
 	for i := 1; i < daysToPlay+1; i++ {
 		dailyTotal := 0
@@ -82,20 +101,164 @@ func play2(tosses int) {
 			switch toss {
 			case heads:
 				dailyTotal++
-				currentEarnings++
+				totalEarnings++
 			case tails:
 				dailyTotal--
-				currentEarnings--
+				totalEarnings--
 			default:
 				panic("invalid value for coin toss")
 			}
 		}
 
-		earningsPerDay = append(earningsPerDay, currentEarnings)
+		earningsPerDay = append(earningsPerDay, totalEarnings)
+		// renderSinglePersonGraph(EarningsPerDay)
+	}
+
+	// total earnings after all days
+	return totalEarnings
+}
+
+func renderAllPeopleScatterGraph(finalEarnings []float64) {
+	// sort.Float64s(finalEarnings)
+
+	numWinners := 0
+	numLosers := 0
+	numEven := 0
+
+	for i := 0; i < len(finalEarnings); i++ {
+		switch {
+		case finalEarnings[i] > 0:
+			numWinners++
+		case finalEarnings[i] < 0:
+			numLosers++
+		default:
+			numEven++
+		}
+	}
+
+	fmt.Printf("Winners: %v; Losers: %v; BrokeEven: %v\n", numWinners, numLosers, numEven)
+
+	bars := make([]chart.Value, len(finalEarnings))
+
+	for i := 0; i < len(finalEarnings); i++ {
+		bars[i] = chart.Value{Value: finalEarnings[i], Label: fmt.Sprint(i)}
+	}
+	viridisByY := func(xr, yr chart.Range, index int, x, y float64) drawing.Color {
+		return chart.Viridis(y, yr.GetMin(), yr.GetMax())
+	}
+
+	graph := chart.Chart{
+		Title: fmt.Sprint("Eanings per Person after all days"),
+		XAxis: chart.XAxis{
+			Name: "People",
+		},
+		YAxis: chart.YAxis{
+			Name: "Earnings",
+			GridLines: []chart.GridLine{
+				{
+					Value:   0,
+					IsMinor: false,
+				},
+			},
+			GridMajorStyle: chart.Style{
+				Hidden:      false,
+				StrokeColor: drawing.ColorBlack,
+				StrokeWidth: 1.5,
+			},
+			GridMinorStyle: chart.Style{
+				Hidden:      false,
+				StrokeColor: drawing.Color{R: 0, G: 0, B: 0, A: 100},
+				StrokeWidth: 1.0,
+			},
+		},
+		Height: 1024,
+		Width:  2048,
+		Series: []chart.Series{
+			chart.ContinuousSeries{
+				Style: chart.Style{
+					StrokeWidth:      chart.Disabled,
+					DotWidth:         3,
+					DotColorProvider: viridisByY,
+				},
+				XValues: chart.Seq{Sequence: chart.NewLinearSequence().WithStart(1.0).WithEnd(float64(len(finalEarnings)))}.Values(),
+				YValues: finalEarnings,
+			},
+		},
+	}
+
+	pngFile, err := os.Create(chartFile)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := graph.Render(chart.PNG, pngFile); err != nil {
+		panic(err)
+	}
+
+	if err := pngFile.Close(); err != nil {
+		panic(err)
 	}
 }
 
-func renderGraph() {
+func renderAllPeopleBarGraph(finalEarnings []float64) {
+	sort.Float64s(finalEarnings)
+
+	numWinners := 0
+	numLosers := 0
+	numEven := 0
+
+	for i := 0; i < len(finalEarnings); i++ {
+		switch {
+		case finalEarnings[i] < 0:
+			numWinners++
+		case finalEarnings[i] > 0:
+			numLosers++
+		default:
+			numEven++
+		}
+	}
+
+	fmt.Printf("Winners: %v; Losers: %v; BrokeEven: %v\n", numWinners, numLosers, numEven)
+
+	bars := make([]chart.Value, len(finalEarnings))
+
+	for i := 0; i < len(finalEarnings); i++ {
+		bars[i] = chart.Value{Value: finalEarnings[i], Label: fmt.Sprint(i)}
+	}
+
+	graph := chart.BarChart{
+		Title: fmt.Sprint("Eanings per Person after all days"),
+		YAxis: chart.YAxis{
+			Name: "Earnings",
+		},
+		Background: chart.Style{
+			Padding: chart.Box{
+				Top: 20,
+			},
+		},
+		Height: 1024,
+		// Width:        2048,
+		BarWidth:     1,
+		UseBaseValue: true,
+		BaseValue:    0.0,
+		Bars:         bars,
+	}
+
+	pngFile, err := os.Create(chartFile)
+	if err != nil {
+		panic(err)
+	}
+
+	if err := graph.Render(chart.PNG, pngFile); err != nil {
+		panic(err)
+	}
+
+	if err := pngFile.Close(); err != nil {
+		panic(err)
+	}
+}
+
+func renderSinglePersonGraph(earningsPerDay []float64) {
 
 	mainSeries := chart.ContinuousSeries{
 		Name: "Coin Tosses",
