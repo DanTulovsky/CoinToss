@@ -36,14 +36,14 @@ func main() {
 
 	earningsPerDay = make([]float64, 0)
 
-	play1()
-	// play2()
+	// play1(1)
+	play2(maxTossesPerDay)
 	renderGraph()
 }
 
 // play1 plays the game with the following algorithm:
-// Keep tossing the coin until you are at +1, then stop.
-func play1() {
+// Keep tossing the coin until you are at +<stopat>, then stop.
+func play1(stopat int) {
 
 	for i := 1; i < daysToPlay+1; i++ {
 		dailyTotal := 0
@@ -60,7 +60,7 @@ func play1() {
 				currentEarnings--
 			}
 
-			if dailyTotal > 0 {
+			if dailyTotal >= stopat {
 				break
 			}
 		}
@@ -70,13 +70,13 @@ func play1() {
 }
 
 // play2 plays the game with the following algorithm:
-// Make all possible tosses every day
-func play2() {
+// Make <tosses> tosses every day
+func play2(tosses int) {
 
 	for i := 1; i < daysToPlay+1; i++ {
 		dailyTotal := 0
 
-		for j := 0; j < maxTossesPerDay; j++ {
+		for j := 0; j < tosses; j++ {
 			toss := tossCoin()
 
 			switch toss {
@@ -86,6 +86,8 @@ func play2() {
 			case tails:
 				dailyTotal--
 				currentEarnings--
+			default:
+				panic("invalid value for coin toss")
 			}
 		}
 
